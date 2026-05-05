@@ -1,0 +1,9 @@
+python-docx
+bcrypt
+reflex==0.8.26
+sqlmodel
+openpyxl
+gspread
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
