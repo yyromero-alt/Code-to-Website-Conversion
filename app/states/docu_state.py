@@ -432,6 +432,12 @@ class DocuState(rx.State):
         self._recalculate_stats()
         return rx.toast(f"Envío {ship_id} eliminado")
 
+    @rx.event
+    def download_project_zip(self):
+        return rx.download(
+            url="/_upload/trazo_project.zip", filename="trazo_project.zip"
+        )
+
     def _process_rows(self, rows):
         new_shipments = []
         for row in rows:

@@ -75,6 +75,15 @@ def sidebar_content() -> rx.Component:
                 "Seguimiento Detalle", "truck", "seguimiento_v2", badge="Nuevo"
             ),
             nav_item("Inventarios", "boxes", "inventarios"),
+            rx.el.button(
+                rx.el.div(
+                    rx.icon("download", class_name="w-5 h-5 text-slate-400"),
+                    rx.el.span("Descargar Proyecto"),
+                    class_name="flex items-center gap-3",
+                ),
+                on_click=DocuState.download_project_zip,
+                class_name="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium text-slate-500 hover:bg-slate-100 mt-4 opacity-70 hover:opacity-100",
+            ),
             rx.cond(
                 AuthState.is_admin,
                 rx.fragment(
