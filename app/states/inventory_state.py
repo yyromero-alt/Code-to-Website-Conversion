@@ -9,6 +9,16 @@ from app.states.auth_state import AuthState
 import logging
 
 
+def _safe_int(val) -> int:
+    """Safely convert Excel cell value to int, returning 0 for errors/non-numeric."""
+    if val is None:
+        return 0
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return 0
+
+
 class InventoryState(rx.State):
     active_inventory_tab: str = "dashboard"
     inventory_items: list[dict] = []
@@ -161,12 +171,7 @@ class InventoryState(rx.State):
                     ref = str(row[2]).strip()
                     if ref:
                         imc_count += 1
-                        stock = 0
-                        if len(row) > 3 and row[3] is not None:
-                            try:
-                                stock = int(float(str(row[3]).strip() or 0))
-                            except (ValueError, TypeError):
-                                pass
+                        stock = _safe_int(row[3]) if len(row) > 3 else 0
                         imc_pivot[ref] = imc_pivot.get(ref, 0) + stock
                         imc_raw_list.append(
                             {
@@ -195,12 +200,7 @@ class InventoryState(rx.State):
                     if row and len(row) > 0 and (row[0] is not None):
                         code = str(row[0]).strip()
                         if code and code != "Product Code":
-                            stock = 0
-                            if len(row) > 2 and row[2] is not None:
-                                try:
-                                    stock = int(float(str(row[2]).strip() or 0))
-                                except (ValueError, TypeError):
-                                    pass
+                            stock = _safe_int(row[2]) if len(row) > 2 else 0
                             latin_products[code] = (
                                 latin_products.get(code, 0) + stock
                             )
@@ -212,10 +212,8 @@ class InventoryState(rx.State):
                                     if len(row) > 1 and row[1] is not None
                                     else "",
                                     "total_stock": stock,
-                                    "available_qty": int(
-                                        float(str(row[4]).strip() or 0)
-                                    )
-                                    if len(row) > 4 and row[4] is not None
+                                    "available_qty": _safe_int(row[4])
+                                    if len(row) > 4
                                     else 0,
                                 }
                             )
@@ -231,21 +229,9 @@ class InventoryState(rx.State):
                         ref = str(row[8]).strip()
                         if not ref:
                             continue
-                        latin_stock = (
-                            int(float(row[16] or 0))
-                            if len(row) > 16 and row[16] is not None
-                            else 0
-                        )
-                        imc_stock = (
-                            int(float(row[17] or 0))
-                            if len(row) > 17 and row[17] is not None
-                            else 0
-                        )
-                        diferencia = (
-                            int(float(row[19] or 0))
-                            if len(row) > 19 and row[19] is not None
-                            else 0
-                        )
+                        latin_stock = _safe_int(row[16]) if len(row) > 16 else 0
+                        imc_stock = _safe_int(row[17]) if len(row) > 17 else 0
+                        diferencia = _safe_int(row[19]) if len(row) > 19 else 0
                         obs = (
                             str(row[15] or "").strip() if len(row) > 15 else ""
                         )
