@@ -3,6 +3,28 @@ from app.states.inventory_state import InventoryState
 from app.states.auth_state import AuthState
 
 
+def source_summary_card(
+    title: str, value: rx.Var | str, icon_name: str, color_class: str
+) -> rx.Component:
+    return rx.el.div(
+        rx.el.div(
+            rx.icon(
+                icon_name,
+                class_name=f"w-5 h-5 {color_class.replace('bg-', 'text-')}",
+            ),
+            class_name=f"w-10 h-10 rounded-xl {color_class} flex items-center justify-center",
+        ),
+        rx.el.div(
+            rx.el.p(
+                title,
+                class_name="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1",
+            ),
+            rx.el.p(value, class_name="text-2xl font-extrabold text-slate-900"),
+        ),
+        class_name="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center gap-4",
+    )
+
+
 def status_dot(color: str, label: str, count: str) -> rx.Component:
     return rx.el.div(
         rx.el.div(class_name=f"w-3 h-3 rounded-full {color}"),
@@ -36,6 +58,7 @@ def inventory_item_row(item: dict) -> rx.Component:
         ("Faltante", "text-red-600"),
         "text-slate-600",
     )
+    obs = item["observacion"].to(str)
     return rx.el.tr(
         rx.el.td(
             item["product_code"].to(str),
@@ -62,11 +85,11 @@ def inventory_item_row(item: dict) -> rx.Component:
         ),
         rx.el.td(
             rx.cond(
-                item["observacion"] != "",
+                obs != "",
                 rx.el.span(
-                    item["observacion"].to(str),
+                    obs,
                     class_name=rx.match(
-                        item["observacion"].to(str),
+                        obs,
                         (
                             "Solo en IMC",
                             "bg-purple-100 text-purple-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase",
@@ -75,12 +98,12 @@ def inventory_item_row(item: dict) -> rx.Component:
                             "Solo en LATIN",
                             "bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase",
                         ),
-                        "text-slate-500",
+                        "text-slate-500 text-xs",
                     ),
                 ),
                 rx.el.span(),
             ),
-            class_name="py-3 px-4 text-xs max-w-[200px] truncate",
+            class_name="py-3 px-4 max-w-[200px] truncate",
         ),
         rx.el.td(
             rx.cond(
@@ -99,29 +122,104 @@ def inventory_item_row(item: dict) -> rx.Component:
     )
 
 
-def source_summary_card(
-    title: str, value: rx.Var, icon_name: str, color_class: str
-) -> rx.Component:
+def audit_card(audit: dict) -> rx.Component:
+    accuracy = audit["accuracy"].to(float)
     return rx.el.div(
         rx.el.div(
-            rx.icon(
-                icon_name,
-                class_name=f"w-5 h-5 {color_class.replace('bg-', 'text-')}",
+            rx.el.div(
+                rx.el.p(
+                    audit["date"].to(str),
+                    class_name="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1",
+                ),
+                rx.el.h3(
+                    f"Precisión: {accuracy:.1f}%",
+                    class_name="text-xl font-bold text-slate-900",
+                ),
             ),
-            class_name=f"w-10 h-10 rounded-xl {color_class} flex items-center justify-center",
+            rx.el.span(
+                audit["status"].to(str),
+                class_name=rx.cond(
+                    accuracy == 100,
+                    "bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-bold",
+                    "bg-amber-50 text-amber-600 px-3 py-1 rounded-lg text-xs font-bold",
+                ),
+            ),
+            class_name="flex items-start justify-between mb-6",
         ),
         rx.el.div(
-            rx.el.p(
-                title,
-                class_name="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1",
+            rx.el.div(
+                rx.el.p(
+                    "Total Ítems",
+                    class_name="text-[10px] uppercase text-slate-400 font-bold mb-1",
+                ),
+                rx.el.p(
+                    audit["total_items"].to(str),
+                    class_name="font-bold text-slate-700",
+                ),
             ),
-            rx.el.p(value, class_name="text-2xl font-extrabold text-slate-900"),
+            rx.el.div(
+                rx.el.p(
+                    "Coinciden",
+                    class_name="text-[10px] uppercase text-slate-400 font-bold mb-1",
+                ),
+                rx.el.p(
+                    audit["matched"].to(str),
+                    class_name="font-bold text-green-600",
+                ),
+            ),
+            rx.el.div(
+                rx.el.p(
+                    "Discrepan",
+                    class_name="text-[10px] uppercase text-slate-400 font-bold mb-1",
+                ),
+                rx.el.p(
+                    audit["discrepancies"].to(str),
+                    class_name="font-bold text-red-600",
+                ),
+            ),
+            class_name="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100",
         ),
-        class_name="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex items-center gap-4",
+        rx.el.div(
+            rx.el.div(
+                rx.el.span(
+                    "Generado por:", class_name="text-xs text-slate-500 mr-2"
+                ),
+                rx.el.span(
+                    audit["created_by"].to(str),
+                    class_name="text-xs font-bold text-slate-700",
+                ),
+                class_name="flex items-center",
+            ),
+            rx.cond(
+                AuthState.is_admin,
+                rx.el.button(
+                    rx.icon("trash-2", class_name="w-4 h-4"),
+                    on_click=lambda: InventoryState.delete_audit(
+                        audit["audit_id"].to(str)
+                    ),
+                    class_name="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors",
+                ),
+            ),
+            class_name="pt-4 flex items-center justify-between",
+        ),
+        class_name="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm",
     )
 
 
 def inventory_dashboard_view() -> rx.Component:
+    val_imc = rx.cond(
+        InventoryState.imc_total_rows > 0,
+        InventoryState.imc_total_rows.to_string()
+        + " filas ("
+        + InventoryState.imc_unique_refs.to_string()
+        + " refs)",
+        "0 filas (0 refs)",
+    )
+    val_latin = rx.cond(
+        InventoryState.latin_total_products > 0,
+        InventoryState.latin_total_products.to_string() + " productos",
+        "0 productos",
+    )
     return rx.el.div(
         rx.el.div(
             rx.el.div(
@@ -147,34 +245,11 @@ def inventory_dashboard_view() -> rx.Component:
         ),
         rx.el.div(
             source_summary_card(
-                "Inventario IMC (Cliente)",
-                rx.cond(
-                    InventoryState.imc_total_rows > 0,
-                    rx.cond(
-                        InventoryState.imc_total_rows > 0,
-                        InventoryState.imc_total_rows.to_string()
-                        + " filas ("
-                        + InventoryState.imc_unique_refs.to_string()
-                        + " refs)",
-                        "0 filas (0 refs)",
-                    ),
-                    InventoryState.imc_total_rows.to_string(),
-                ),
-                "warehouse",
-                "bg-purple-50",
+                "Inventario IMC (Cliente)", val_imc, "warehouse", "bg-purple-50"
             ),
             source_summary_card(
                 "Inventario LATIN (Empresa)",
-                rx.cond(
-                    InventoryState.latin_total_products > 0,
-                    rx.cond(
-                        InventoryState.latin_total_products > 0,
-                        InventoryState.latin_total_products.to_string()
-                        + " productos",
-                        "0 productos",
-                    ),
-                    InventoryState.latin_total_products.to_string(),
-                ),
+                val_latin,
                 "building-2",
                 "bg-indigo-50",
             ),
@@ -454,16 +529,23 @@ def inventory_dashboard_view() -> rx.Component:
                     ),
                     class_name="flex-1 flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 bg-white",
                 ),
-                rx.el.select(
-                    rx.el.option("Todos", value="all"),
-                    rx.el.option("Coincide", value="match"),
-                    rx.el.option("Sobrante", value="sobrante"),
-                    rx.el.option("Faltante", value="faltante"),
-                    on_change=InventoryState.set_inventory_filter,
-                    value=InventoryState.inventory_filter,
-                    class_name="px-4 py-2 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-blue-100 appearance-none",
+                rx.el.div(
+                    rx.el.select(
+                        rx.el.option("Todos", value="all"),
+                        rx.el.option("Coincide", value="match"),
+                        rx.el.option("Sobrante", value="sobrante"),
+                        rx.el.option("Faltante", value="faltante"),
+                        on_change=InventoryState.set_inventory_filter,
+                        value=InventoryState.inventory_filter,
+                        class_name="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-blue-100 appearance-none",
+                    ),
+                    rx.icon(
+                        "chevron-down",
+                        class_name="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none",
+                    ),
+                    class_name="relative w-48",
                 ),
-                class_name="flex items-center gap-4 mb-6",
+                class_name="flex flex-col md:flex-row items-center gap-4 p-6 border-b border-slate-200 bg-slate-50/50 rounded-t-2xl",
             ),
             rx.el.div(
                 rx.cond(
@@ -523,90 +605,6 @@ def inventory_dashboard_view() -> rx.Component:
     )
 
 
-def audit_card(audit: dict) -> rx.Component:
-    accuracy = audit["accuracy"].to(float)
-    return rx.el.div(
-        rx.el.div(
-            rx.el.div(
-                rx.el.p(
-                    audit["date"].to(str),
-                    class_name="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1",
-                ),
-                rx.el.h3(
-                    f"Precisión: {accuracy:.1f}%",
-                    class_name="text-xl font-bold text-slate-900",
-                ),
-            ),
-            rx.el.span(
-                rx.cond(accuracy == 100, "Perfecta", "Con Discrepancias"),
-                class_name=rx.cond(
-                    accuracy == 100,
-                    "bg-green-50 text-green-600 px-3 py-1 rounded-lg text-xs font-bold",
-                    "bg-amber-50 text-amber-600 px-3 py-1 rounded-lg text-xs font-bold",
-                ),
-            ),
-            class_name="flex items-start justify-between mb-6",
-        ),
-        rx.el.div(
-            rx.el.div(
-                rx.el.p(
-                    "Total Ítems",
-                    class_name="text-[10px] uppercase text-slate-400 font-bold mb-1",
-                ),
-                rx.el.p(
-                    audit["total_items"].to(str),
-                    class_name="font-bold text-slate-700",
-                ),
-            ),
-            rx.el.div(
-                rx.el.p(
-                    "Coinciden",
-                    class_name="text-[10px] uppercase text-slate-400 font-bold mb-1",
-                ),
-                rx.el.p(
-                    audit["matched"].to(str),
-                    class_name="font-bold text-green-600",
-                ),
-            ),
-            rx.el.div(
-                rx.el.p(
-                    "Discrepan",
-                    class_name="text-[10px] uppercase text-slate-400 font-bold mb-1",
-                ),
-                rx.el.p(
-                    audit["discrepancies"].to(str),
-                    class_name="font-bold text-red-600",
-                ),
-            ),
-            class_name="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100",
-        ),
-        rx.el.div(
-            rx.el.div(
-                rx.el.span(
-                    "Generado por:", class_name="text-xs text-slate-500 mr-2"
-                ),
-                rx.el.span(
-                    audit["created_by"].to(str),
-                    class_name="text-xs font-bold text-slate-700",
-                ),
-                class_name="flex items-center",
-            ),
-            rx.cond(
-                AuthState.is_admin,
-                rx.el.button(
-                    rx.icon("trash-2", class_name="w-4 h-4"),
-                    on_click=lambda: InventoryState.delete_audit(
-                        audit["audit_id"].to(str)
-                    ),
-                    class_name="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors",
-                ),
-            ),
-            class_name="pt-4 flex items-center justify-between",
-        ),
-        class_name="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm",
-    )
-
-
 def inventory_audits_view() -> rx.Component:
     return rx.el.div(
         rx.el.div(
@@ -626,7 +624,7 @@ def inventory_audits_view() -> rx.Component:
                     rx.icon("plus", class_name="w-4 h-4"),
                     rx.el.span("Ejecutar Nueva Auditoría"),
                     on_click=InventoryState.run_audit,
-                    class_name="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-colors",
+                    class_name="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-colors mt-4 md:mt-0",
                 ),
             ),
             class_name="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8",
@@ -660,8 +658,8 @@ def inventory_view() -> rx.Component:
                 on_click=lambda: InventoryState.set_inventory_tab("dashboard"),
                 class_name=rx.cond(
                     InventoryState.active_inventory_tab == "dashboard",
-                    "px-6 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white shadow-md",
-                    "px-6 py-2 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100",
+                    "px-6 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white shadow-md transition-all",
+                    "px-6 py-2 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 transition-all",
                 ),
             ),
             rx.el.button(
@@ -669,11 +667,11 @@ def inventory_view() -> rx.Component:
                 on_click=lambda: InventoryState.set_inventory_tab("audits"),
                 class_name=rx.cond(
                     InventoryState.active_inventory_tab == "audits",
-                    "px-6 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white shadow-md",
-                    "px-6 py-2 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100",
+                    "px-6 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white shadow-md transition-all",
+                    "px-6 py-2 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 transition-all",
                 ),
             ),
-            class_name="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-2xl w-fit mb-8",
+            class_name="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-2xl w-fit mb-8 shadow-sm",
         ),
         rx.cond(
             InventoryState.active_inventory_tab == "dashboard",

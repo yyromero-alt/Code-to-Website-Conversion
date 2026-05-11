@@ -33,8 +33,25 @@ class InventoryState(rx.State):
     is_importing: bool = False
     show_discrepancies: bool = False
 
+    def _apply_filters(self):
+        q = self.inventory_search.lower().strip()
+        f = self.inventory_filter
+        result = []
+        for item in self.inventory_items:
+            if q and q not in str(item.get("product_code", "")).lower():
+                continue
+            d = item.get("diferencia", 0)
+            est = item.get("estado", "")
+            if f == "match" and d != 0:
+                continue
+            if f == "sobrante" and est != "Sobrante":
+                continue
+            if f == "faltante" and est != "Faltante":
+                continue
+            result.append(item)
+        self.filtered_items = result
+
     def _compute_stats(self):
-        """Compute all scalar stats from inventory_items. Called once after data load/change."""
         n = len(self.inventory_items)
         self.total_items = n
         m = 0
@@ -64,32 +81,11 @@ class InventoryState(rx.State):
         else:
             self.discrepancy_items = []
 
-    def _apply_filters(self):
-        """Filter inventory_items by search and status filter."""
-        items = self.inventory_items
-        q = self.inventory_search.lower().strip()
-        f = self.inventory_filter
-        if q or f != "all":
-            result = []
-            for item in items:
-                if q and q not in str(item.get("product_code", "")).lower():
-                    continue
-                if f == "match" and item.get("diferencia", 0) != 0:
-                    continue
-                if f == "sobrante" and item.get("estado") != "Sobrante":
-                    continue
-                if f == "faltante" and item.get("estado") != "Faltante":
-                    continue
-                result.append(item)
-            self.filtered_items = result
-        else:
-            self.filtered_items = items
-
     @rx.event
     def load_inventory_data(self):
         data = SharedStore.load_all_inventory_data()
-        self.inventory_items = data["inventory_items"]
-        self.inventory_audits = data["inventory_audits"]
+        self.inventory_items = data.get("inventory_items", [])
+        self.inventory_audits = data.get("inventory_audits", [])
         imc_raw = data.get("imc_raw_data", [])
         latin_raw = data.get("latin_raw_data", [])
         self.imc_total_rows = len(imc_raw)
@@ -153,8 +149,8 @@ class InventoryState(rx.State):
             if len(wb.sheetnames) < 1:
                 self.import_message = "El Excel está vacío."
                 wb.close()
-                yield rx.toast(self.import_message)
                 self.is_importing = False
+                yield rx.toast(self.import_message)
                 return
             imc_sheet = wb.worksheets[0]
             imc_pivot = {}
@@ -235,25 +231,31 @@ class InventoryState(rx.State):
                         ref = str(row[8]).strip()
                         if not ref:
                             continue
-                        try:
-                            latin_stock = int(float(row[16] or 0))
-                        except (ValueError, TypeError):
-                            latin_stock = 0
-                        try:
-                            imc_stock = int(float(row[17] or 0))
-                        except (ValueError, TypeError):
-                            imc_stock = 0
-                        try:
-                            diferencia = int(float(row[19] or 0))
-                        except (ValueError, TypeError):
-                            diferencia = 0
-                        obs = str(row[15] or "").strip()
-                        if diferencia == 0:
-                            estado = "Coincide"
-                        elif diferencia > 0:
-                            estado = "Sobrante"
-                        else:
-                            estado = "Faltante"
+                        latin_stock = (
+                            int(float(row[16] or 0))
+                            if len(row) > 16 and row[16] is not None
+                            else 0
+                        )
+                        imc_stock = (
+                            int(float(row[17] or 0))
+                            if len(row) > 17 and row[17] is not None
+                            else 0
+                        )
+                        diferencia = (
+                            int(float(row[19] or 0))
+                            if len(row) > 19 and row[19] is not None
+                            else 0
+                        )
+                        obs = (
+                            str(row[15] or "").strip() if len(row) > 15 else ""
+                        )
+                        estado = (
+                            "Coincide"
+                            if diferencia == 0
+                            else "Sobrante"
+                            if diferencia > 0
+                            else "Faltante"
+                        )
                         vs_items.append(
                             {
                                 "item_id": str(uuid.uuid4()),
@@ -267,9 +269,7 @@ class InventoryState(rx.State):
                             }
                         )
                 vs_refs = set((item["product_code"] for item in vs_items))
-                imc_refs = set(imc_pivot.keys())
-                latin_refs = set(latin_products.keys())
-                imc_only = imc_refs - vs_refs
+                imc_only = set(imc_pivot.keys()) - vs_refs
                 for ref in sorted(imc_only):
                     stock = imc_pivot[ref]
                     vs_items.append(
@@ -284,7 +284,7 @@ class InventoryState(rx.State):
                             "imported_at": now_str,
                         }
                     )
-                latin_only = latin_refs - vs_refs
+                latin_only = set(latin_products.keys()) - vs_refs
                 for ref in sorted(latin_only):
                     stock = latin_products[ref]
                     vs_items.append(
@@ -306,11 +306,13 @@ class InventoryState(rx.State):
                     l_stock = latin_products.get(ref, 0)
                     i_stock = imc_pivot.get(ref, 0)
                     diff = l_stock - i_stock
-                    est = "Coincide"
-                    if diff > 0:
-                        est = "Sobrante"
-                    elif diff < 0:
-                        est = "Faltante"
+                    est = (
+                        "Coincide"
+                        if diff == 0
+                        else "Sobrante"
+                        if diff > 0
+                        else "Faltante"
+                    )
                     new_items.append(
                         {
                             "item_id": str(uuid.uuid4()),
@@ -319,7 +321,7 @@ class InventoryState(rx.State):
                             "stock_imc": i_stock,
                             "diferencia": diff,
                             "estado": est,
-                            "observacion": "Generado por unión (Falta hoja VS)",
+                            "observacion": "Generado por unión",
                             "imported_at": now_str,
                         }
                     )
@@ -335,15 +337,16 @@ class InventoryState(rx.State):
                     if "DIFERENCIAS" in wb_report.sheetnames:
                         del wb_report["DIFERENCIAS"]
                     ws = wb_report.create_sheet("DIFERENCIAS")
-                    headers = [
-                        "CÓDIGO",
-                        "STOCK LATIN",
-                        "STOCK IMC",
-                        "DIFERENCIA",
-                        "ESTADO",
-                        "OBSERVACIÓN",
-                    ]
-                    ws.append(headers)
+                    ws.append(
+                        [
+                            "CÓDIGO",
+                            "STOCK LATIN",
+                            "STOCK IMC",
+                            "DIFERENCIA",
+                            "ESTADO",
+                            "OBSERVACIÓN",
+                        ]
+                    )
                     header_font = Font(bold=True, color="FFFFFF")
                     header_fill = PatternFill(
                         start_color="DC2626",
@@ -369,14 +372,17 @@ class InventoryState(rx.State):
                     wb_report.save(output_path)
                     wb_report.close()
                 except Exception as e:
-                    logging.exception(f"Error generating pre-report: {e}")
-                self.import_message = f"{len(new_items)} productos procesados correctamente usando la hoja VS."
+                    logging.exception(f"Error generating report: {e}")
+                self.import_message = (
+                    f"{len(new_items)} productos procesados correctamente."
+                )
+                yield rx.toast(self.import_message)
                 yield InventoryState.run_audit()
             else:
                 self.import_message = (
                     "No se encontraron productos para procesar."
                 )
-            yield rx.toast(self.import_message)
+                yield rx.toast(self.import_message)
         except Exception as e:
             logging.exception(f"Error importando inventario: {e}")
             self.import_message = "Error al procesar el archivo Excel."
